@@ -89,3 +89,17 @@ export async function deleteAllForChat(db: D1Database, chatId: number): Promise<
   await db.prepare("DELETE FROM entries WHERE chat_id = ?").bind(chatId).run();
   await db.prepare("DELETE FROM pending WHERE chat_id = ?").bind(chatId).run();
 }
+
+/** Used for the per-chat daily rate limit — counts only *saved* entries, not
+ * abandoned/pending flows. */
+export async function countRecentEntries(
+  db: D1Database,
+  chatId: number,
+  sinceMs: number
+): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) as count FROM entries WHERE chat_id = ? AND created_at >= ?")
+    .bind(chatId, sinceMs)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}

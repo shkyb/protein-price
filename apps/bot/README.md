@@ -13,6 +13,11 @@ you and so `/deleteme` knows what to erase. There's also a `pending` table holdi
 mid-conversation state (which question you're on); rows there older than an hour are
 purged automatically since they're not saved data, just an abandoned flow.
 
+**Abuse limits**, to keep free-tier usage sane once the bot is public: price under
+€10,000, weight under 50kg, protein per 100g capped at 100 (the physical maximum —
+you can't have more than 100g of protein in 100g of food), product name under 100
+characters, and at most 100 saved entries per chat per rolling 24 hours.
+
 ## One-time setup
 
 ### 1. Create the bot and get a token
