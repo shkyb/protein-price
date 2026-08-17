@@ -1,0 +1,9 @@
+name = "protein-value-bot"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Filled in after running: wrangler d1 create protein-value-db
+[[d1_databases]]
+binding = "DB"
+database_name = "protein-value-db"
+database_id = "REPLACE_WITH_DATABASE_ID"

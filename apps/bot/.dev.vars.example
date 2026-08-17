@@ -1,0 +1,9 @@
+# Copy this file to .dev.vars (already gitignored) and fill in real values.
+# Never commit .dev.vars — it holds live secrets.
+
+# From @BotFather after /newbot
+TELEGRAM_BOT_TOKEN=123456789:AAExampleTokenReplaceMe
+
+# Any long random string you make up yourself — must match what you pass as
+# secret_token when you call setWebhook (see README.md).
+TELEGRAM_WEBHOOK_SECRET=replace-with-a-long-random-string
