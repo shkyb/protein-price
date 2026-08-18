@@ -2,8 +2,7 @@ name = "protein-price-bot"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
-# Filled in after running: wrangler d1 create protein-price-db
 [[d1_databases]]
 binding = "DB"
 database_name = "protein-price-db"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "0a80ea08-a6c5-4936-80c4-079871f4f6aa"
