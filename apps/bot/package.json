@@ -2,6 +2,9 @@
   "name": "protein-price-bot",
   "private": true,
   "version": "0.0.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
