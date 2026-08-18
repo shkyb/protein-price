@@ -1,4 +1,6 @@
-# protein-value bot
+# protein-price bot
+
+Registered as [@ProteinPriceBot](https://t.me/ProteinPriceBot) — not yet deployed/wired to a webhook, so messaging it won't do anything until setup finishes (see below).
 
 A Telegram bot that asks four questions — price, package weight, protein per 100g,
 optional product name — and returns €/gram of protein. Stateless serverless function
@@ -44,7 +46,7 @@ Opens a browser to authorize — one-time, nothing to paste into any file.
 ### 4. Create the D1 database
 
 ```sh
-npx wrangler d1 create protein-value-db
+npx wrangler d1 create protein-price-db
 ```
 
 This prints a `database_id`. Paste it into `wrangler.toml`, replacing
@@ -78,7 +80,7 @@ Edit `.dev.vars` and fill in:
 npm run deploy
 ```
 
-Prints your live URL, something like `https://protein-value-bot.<you>.workers.dev`.
+Prints your live URL, something like `https://protein-price-bot.<you>.workers.dev`.
 
 ### 8. Set the real secrets on Cloudflare
 

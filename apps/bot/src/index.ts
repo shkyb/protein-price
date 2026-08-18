@@ -38,7 +38,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET") {
-      return new Response("protein-value bot is running", { status: 200 });
+      return new Response("protein-price bot is running", { status: 200 });
     }
 
     if (request.method !== "POST" || url.pathname !== "/webhook") {

@@ -1,4 +1,4 @@
-# protein-value
+# protein-price
 
 Calculates how many euros you're paying per gram of protein for things you buy — so
 "which of these is actually the cheaper protein source" has a real number behind it.
