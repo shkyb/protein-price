@@ -47,6 +47,30 @@ export async function sendMessage(
   }
 }
 
+const MAIN_MENU_KEYBOARD = {
+  keyboard: [[{ text: "➕ Add" }, { text: "📊 History" }, { text: "❌ Cancel" }]],
+  resize_keyboard: true,
+  is_persistent: true,
+};
+
+/**
+ * Sends a message carrying the persistent quick-menu (Add/History/Cancel).
+ * Unlike inline keyboards, a reply keyboard isn't tied to one message: once
+ * shown, it stays on the user's screen across every later message until
+ * something replaces or removes it. So this only needs to be sent once, at
+ * the natural onboarding point (/start), not attached to every reply.
+ */
+export async function sendMessageWithMenu(token: string, chatId: number, text: string): Promise<void> {
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, reply_markup: MAIN_MENU_KEYBOARD }),
+  });
+  if (!res.ok) {
+    console.error("Telegram sendMessage (with menu) failed:", res.status, await res.text());
+  }
+}
+
 /**
  * Rewrites an existing message in place (used after a button tap, so the chat
  * shows the outcome instead of a second message plus stale buttons). Passing

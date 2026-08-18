@@ -1,5 +1,6 @@
 import {
   sendMessage,
+  sendMessageWithMenu,
   editMessageText,
   answerCallbackQuery,
   type TelegramUpdate,
@@ -16,6 +17,14 @@ const NAME_STEP_KEYBOARD: InlineKeyboard = [
     { text: "❌ Cancel", callback_data: "cancel" },
   ],
 ];
+
+// Pressing a persistent-menu button sends its label as plain text, so it's
+// aliased to the matching command before any command comparison runs.
+const MENU_LABEL_TO_COMMAND: Record<string, string> = {
+  "➕ Add": "/add",
+  "📊 History": "/history",
+  "❌ Cancel": "/cancel",
+};
 
 const PENDING_TTL_MS = 60 * 60 * 1000; // 1 hour — abandoned flows get cleared, not saved data.
 
@@ -153,14 +162,17 @@ export default {
     }
 
     const chatId = message.chat.id;
-    const text = message.text.trim();
+    const rawText = message.text.trim();
+    const text = MENU_LABEL_TO_COMMAND[rawText] ?? rawText;
     const reply = (msg: string, keyboard?: InlineKeyboard) =>
       sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg, keyboard);
 
     await db.purgeStalePending(env.DB, PENDING_TTL_MS);
 
     if (text === "/start") {
-      await reply(
+      await sendMessageWithMenu(
+        env.TELEGRAM_BOT_TOKEN,
+        chatId,
         "Hi! I calculate how many euros you're paying per gram of protein.\n\n" +
           "/add — log a new item\n" +
           "/history — see your last entries\n" +
