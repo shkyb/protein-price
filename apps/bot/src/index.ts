@@ -28,6 +28,7 @@ const MAX_PROTEIN_PER_100G = 100;
 const MAX_NAME_LENGTH = 100;
 const MAX_ENTRIES_PER_DAY = 100; // per chat_id — plenty for real use, blocks scripted floods
 const MAX_LIST_SHOWN = 10; // shared by /history and /cheapest
+const TOTAL_STEPS = 4; // price, weight, protein, name
 
 // Digits with an optional single decimal separator (. or ,) — nothing else.
 // Rejects letters, symbols, signs, and scientific notation ("1e2" would
@@ -220,7 +221,7 @@ export default {
         protein: null,
         updated_at: Date.now(),
       });
-      await reply("What's the price? (€)", CANCEL_KEYBOARD);
+      await reply(`Step 1 of ${TOTAL_STEPS}: what's the price? (€)`, CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -241,7 +242,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, price: result.value, step: "weight", updated_at: Date.now() });
-      await reply("Package weight? (grams)", CANCEL_KEYBOARD);
+      await reply(`Step 2 of ${TOTAL_STEPS}: package weight? (grams)`, CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -256,7 +257,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, weight: result.value, step: "protein", updated_at: Date.now() });
-      await reply("Protein per 100g?", CANCEL_KEYBOARD);
+      await reply(`Step 3 of ${TOTAL_STEPS}: protein per 100g?`, CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -271,7 +272,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, protein: result.value, step: "name", updated_at: Date.now() });
-      await reply("Product name? (optional — send /skip)", NAME_STEP_KEYBOARD);
+      await reply(`Step 4 of ${TOTAL_STEPS}: product name? (optional — send /skip)`, NAME_STEP_KEYBOARD);
       return new Response("OK");
     }
 
