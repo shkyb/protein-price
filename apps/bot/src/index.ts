@@ -14,10 +14,23 @@ const MAX_PROTEIN_PER_100G = 100;
 const MAX_NAME_LENGTH = 100;
 const MAX_ENTRIES_PER_DAY = 100; // per chat_id — plenty for real use, blocks scripted floods
 
-function parseBoundedNumber(text: string, max: number): number | null {
-  const n = Number(text.trim().replace(",", "."));
-  if (!Number.isFinite(n) || n <= 0 || n > max) return null;
-  return n;
+// Digits with an optional single decimal separator (. or ,) — nothing else.
+// Rejects letters, symbols, signs, and scientific notation ("1e2" would
+// otherwise parse as 100 under plain Number()).
+const NUMBER_PATTERN = /^\d+([.,]\d+)?$/;
+
+type NumberValidation = { ok: true; value: number } | { ok: false; reason: "format" | "range" };
+
+function validateNumber(text: string, max: number): NumberValidation {
+  const trimmed = text.trim();
+  if (!NUMBER_PATTERN.test(trimmed)) {
+    return { ok: false, reason: "format" };
+  }
+  const value = Number(trimmed.replace(",", "."));
+  if (!Number.isFinite(value) || value <= 0 || value > max) {
+    return { ok: false, reason: "range" };
+  }
+  return { ok: true, value };
 }
 
 export default {
@@ -100,34 +113,46 @@ export default {
     }
 
     if (pending.step === "price") {
-      const price = parseBoundedNumber(text, MAX_PRICE);
-      if (price === null) {
-        await reply(`That doesn't look like a valid price. Try again, e.g. 2.50 (must be under €${MAX_PRICE})`);
+      const result = validateNumber(text, MAX_PRICE);
+      if (!result.ok) {
+        await reply(
+          result.reason === "format"
+            ? "Just the number, please — e.g. 2.50 or 2,50 (no letters, symbols, or currency signs)."
+            : `Price has to be more than 0 and no more than €${MAX_PRICE}.`
+        );
         return new Response("OK");
       }
-      await db.setPending(env.DB, { ...pending, price, step: "weight", updated_at: Date.now() });
+      await db.setPending(env.DB, { ...pending, price: result.value, step: "weight", updated_at: Date.now() });
       await reply("Package weight? (grams)");
       return new Response("OK");
     }
 
     if (pending.step === "weight") {
-      const weight = parseBoundedNumber(text, MAX_WEIGHT_GRAMS);
-      if (weight === null) {
-        await reply(`That doesn't look like a valid weight. Try again, e.g. 500 (must be under ${MAX_WEIGHT_GRAMS}g)`);
+      const result = validateNumber(text, MAX_WEIGHT_GRAMS);
+      if (!result.ok) {
+        await reply(
+          result.reason === "format"
+            ? "Just the number of grams, please — e.g. 500 (no letters, symbols, or units like 'g')."
+            : `Weight has to be more than 0 and no more than ${MAX_WEIGHT_GRAMS}g.`
+        );
         return new Response("OK");
       }
-      await db.setPending(env.DB, { ...pending, weight, step: "protein", updated_at: Date.now() });
+      await db.setPending(env.DB, { ...pending, weight: result.value, step: "protein", updated_at: Date.now() });
       await reply("Protein per 100g?");
       return new Response("OK");
     }
 
     if (pending.step === "protein") {
-      const protein = parseBoundedNumber(text, MAX_PROTEIN_PER_100G);
-      if (protein === null) {
-        await reply(`That doesn't look like a valid protein amount. Try again, e.g. 23 (max ${MAX_PROTEIN_PER_100G}, since that's grams of protein per 100g of food)`);
+      const result = validateNumber(text, MAX_PROTEIN_PER_100G);
+      if (!result.ok) {
+        await reply(
+          result.reason === "format"
+            ? "Just the number, please — e.g. 23 (no letters or symbols)."
+            : `Protein per 100g has to be more than 0 and no more than ${MAX_PROTEIN_PER_100G} — that's the physical max, since it's grams of protein per 100g of food.`
+        );
         return new Response("OK");
       }
-      await db.setPending(env.DB, { ...pending, protein, step: "name", updated_at: Date.now() });
+      await db.setPending(env.DB, { ...pending, protein: result.value, step: "name", updated_at: Date.now() });
       await reply("Product name? (optional — send /skip)");
       return new Response("OK");
     }
