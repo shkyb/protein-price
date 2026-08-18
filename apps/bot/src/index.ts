@@ -66,14 +66,45 @@ function formatCentsPerGram(valuePerGram: number): string {
   return `${(valuePerGram * 100).toFixed(2)} cents/g protein`;
 }
 
-// With a rank, the rank is the sort key being shown (e.g. /cheapest) so it
-// leads the line. Without one, recency is implicit and the date leads instead
-// (e.g. /history).
-function formatEntryLine(entry: db.Entry, rank?: number): string {
-  const date = new Date(entry.created_at).toISOString().slice(0, 10);
-  const label = entry.name ?? "(no name)";
-  const value = formatCentsPerGram(entry.value_per_gram);
-  return rank !== undefined ? `${rank}. ${label} — ${value} (${date})` : `${date}: ${label} — ${value}`;
+// /history and /cheapest render as a monospace table inside a code block.
+// Code block content is shown literally, not re-parsed for other Markdown
+// entities, which is actually the *safe* place to put a raw user name
+// (unlike the plain-text result message). The one thing that still has to be
+// handled: a literal backtick in a name could prematurely close the block,
+// so it's stripped before the name ever reaches the table.
+const DATE_COL = 10; // "YYYY-MM-DD"
+const NAME_COL = 18;
+
+function centsValue(valuePerGram: number): string {
+  return (valuePerGram * 100).toFixed(2);
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function tableNameCell(name: string | null): string {
+  const safe = (name ?? "(no name)").replace(/`/g, "'");
+  return truncate(safe, NAME_COL).padEnd(NAME_COL);
+}
+
+function buildHistoryTable(entries: db.Entry[]): string {
+  const header = `${"Date".padEnd(DATE_COL)} ${"Name".padEnd(NAME_COL)} cents/g`;
+  const rows = entries.map((e) => {
+    const date = new Date(e.created_at).toISOString().slice(0, 10);
+    return `${date.padEnd(DATE_COL)} ${tableNameCell(e.name)} ${centsValue(e.value_per_gram).padStart(7)}`;
+  });
+  return "```\n" + [header, ...rows].join("\n") + "\n```";
+}
+
+function buildCheapestTable(entries: db.Entry[]): string {
+  const rankCol = 3;
+  const header = `${"#".padEnd(rankCol)}${"Name".padEnd(NAME_COL)} cents/g  Date`;
+  const rows = entries.map((e, i) => {
+    const date = new Date(e.created_at).toISOString().slice(0, 10);
+    return `${String(i + 1).padEnd(rankCol)}${tableNameCell(e.name)} ${centsValue(e.value_per_gram).padStart(7)}  ${date}`;
+  });
+  return "```\n" + [header, ...rows].join("\n") + "\n```";
 }
 
 // Shared by the text-based name step and the "Skip" button, so saving an
@@ -164,12 +195,12 @@ export default {
     const chatId = message.chat.id;
     const rawText = message.text.trim();
     const text = MENU_LABEL_TO_COMMAND[rawText] ?? rawText;
-    const reply = (msg: string, keyboard?: InlineKeyboard) =>
-      sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg, keyboard);
+    const reply = (msg: string, keyboard?: InlineKeyboard, parseMode?: "Markdown") =>
+      sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg, keyboard, parseMode);
     // Step prompts are entirely bot-authored text, so bolding the counter is
     // safe — unlike the result message, nothing here is raw user input.
     const replyStep = (step: number, question: string, keyboard: InlineKeyboard) =>
-      sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, `*Step ${step} of ${TOTAL_STEPS}*\n\n${question}`, keyboard, "Markdown");
+      reply(`*Step ${step} of ${TOTAL_STEPS}*\n\n${question}`, keyboard, "Markdown");
 
     await db.purgeStalePending(env.DB, PENDING_TTL_MS);
 
@@ -197,8 +228,8 @@ export default {
         await reply("You haven't logged anything yet. Send /add to log your first item.");
         return new Response("OK");
       }
-      const lines = entries.map((e) => formatEntryLine(e)).join("\n");
-      await reply(`Your last ${entries.length} ${entries.length === 1 ? "entry" : "entries"}:\n\n${lines}`);
+      const heading = `*Your last ${entries.length} ${entries.length === 1 ? "entry" : "entries"}:*`;
+      await reply(`${heading}\n\n${buildHistoryTable(entries)}`, undefined, "Markdown");
       return new Response("OK");
     }
 
@@ -208,9 +239,8 @@ export default {
         await reply("You haven't logged anything yet. Send /add to log your first item.");
         return new Response("OK");
       }
-      const lines = entries.map((e, i) => formatEntryLine(e, i + 1)).join("\n");
       const heading = entries.length === 1 ? "Your cheapest entry" : `Your ${entries.length} cheapest entries`;
-      await reply(`${heading}, best value first:\n\n${lines}`);
+      await reply(`*${heading}, best value first:*\n\n${buildCheapestTable(entries)}`, undefined, "Markdown");
       return new Response("OK");
     }
 
