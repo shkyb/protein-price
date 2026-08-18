@@ -1,24 +1,25 @@
 # protein-price bot
 
-Registered as [@ProteinPriceBot](https://t.me/ProteinPriceBot) — not yet deployed/wired to a webhook, so messaging it won't do anything until setup finishes (see below).
+Registered as [@ProteinPriceBot](https://t.me/ProteinPriceBot), but not yet deployed or wired to a webhook, so messaging it won't do anything until setup finishes (see below).
 
-A Telegram bot that asks four questions — price, package weight, protein per 100g,
-optional product name — and returns €/gram of protein. Stateless serverless function
-(Cloudflare Workers) + Cloudflare D1 for storage, no server to keep running.
+A Telegram bot that asks four questions (price, package weight, protein per 100g,
+optional product name) and returns euros per gram of protein. It's a stateless
+serverless function on Cloudflare Workers, with Cloudflare D1 for storage, so
+there's no server to keep running.
 
 ## What's stored
 
 Per saved entry: `chat_id`, `name` (optional), `price`, `weight`, `protein`,
-the computed `value_per_gram`, and a timestamp. That's it — no username, no real
+the computed `value_per_gram`, and a timestamp. That's it: no username, no real
 name, no location. `chat_id` is the only identifier, needed so the bot can reply to
 you and so `/deleteme` knows what to erase. There's also a `pending` table holding
 mid-conversation state (which question you're on); rows there older than an hour are
 purged automatically since they're not saved data, just an abandoned flow.
 
 **Abuse limits**, to keep free-tier usage sane once the bot is public: price under
-€10,000, weight under 50kg, protein per 100g capped at 100 (the physical maximum —
-you can't have more than 100g of protein in 100g of food), product name under 100
-characters, and at most 100 saved entries per chat per rolling 24 hours.
+€10,000, weight under 50kg, protein per 100g capped at 100 (the physical maximum,
+since you can't have more than 100g of protein in 100g of food), product name under
+100 characters, and at most 100 saved entries per chat per rolling 24 hours.
 
 ## One-time setup
 
@@ -26,7 +27,7 @@ characters, and at most 100 saved entries per chat per rolling 24 hours.
 
 Message **[@BotFather](https://t.me/BotFather)** on Telegram → `/newbot` → follow the
 prompts (pick a name and a `@username`). It gives you a token that looks like
-`123456789:AA...`. Keep it private — it's the credential that controls the bot.
+`123456789:AA...`. Keep it private, it's the credential that controls the bot.
 
 ### 2. Install dependencies
 
@@ -41,7 +42,7 @@ npm install
 npx wrangler login
 ```
 
-Opens a browser to authorize — one-time, nothing to paste into any file.
+Opens a browser to authorize. One-time, nothing to paste into any file.
 
 ### 4. Create the D1 database
 
@@ -66,13 +67,13 @@ cp .dev.vars.example .dev.vars
 ```
 
 Edit `.dev.vars` and fill in:
-- `TELEGRAM_BOT_TOKEN` — from step 1.
-- `TELEGRAM_WEBHOOK_SECRET` — any long random string you make up (e.g.
-  `openssl rand -hex 32`). This isn't from Telegram — it's a shared secret *you*
+- `TELEGRAM_BOT_TOKEN`: from step 1.
+- `TELEGRAM_WEBHOOK_SECRET`: any long random string you make up (e.g.
+  `openssl rand -hex 32`). This isn't from Telegram. It's a shared secret *you*
   choose, used so the deployed worker can verify a request genuinely came from
   Telegram and not from someone who found the URL and started POSTing to it.
 
-`.dev.vars` is gitignored — it never gets committed.
+`.dev.vars` is gitignored, so it never gets committed.
 
 ### 7. Deploy
 
@@ -85,7 +86,7 @@ Prints your live URL, something like `https://protein-price-bot.<you>.workers.de
 ### 8. Set the real secrets on Cloudflare
 
 Local `.dev.vars` only affects `wrangler dev`. The deployed worker needs its own
-copies, stored in Cloudflare's secret manager (not in any file):
+copies, stored in Cloudflare's secret manager, not in any file:
 
 ```sh
 npx wrangler secret put TELEGRAM_BOT_TOKEN
@@ -120,7 +121,7 @@ to your `.dev.vars` value.
 ## Safety notes
 
 - Both secrets live only in `.dev.vars` (gitignored, local) and Cloudflare's secret
-  store (`wrangler secret put`, deployed) — never in a committed file.
+  store (`wrangler secret put`, deployed), never in a committed file.
 - The webhook handler rejects any POST that doesn't carry the correct
   `X-Telegram-Bot-Api-Secret-Token` header, so the public URL can't be used to inject
   fake messages into the database.
