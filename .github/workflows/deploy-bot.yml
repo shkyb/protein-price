@@ -1,0 +1,33 @@
+name: Deploy bot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/bot/**"
+      - ".github/workflows/deploy-bot.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/bot
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/bot
+          command: deploy
