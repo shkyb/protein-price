@@ -34,13 +34,21 @@ function validateNumber(text: string, max: number): NumberValidation {
   return { ok: true, value };
 }
 
+// Stored as euros/gram (the natural unit for the underlying math), displayed
+// as cents/gram: €0.0217 reads as a string of leading zeros, 2.17 cents
+// doesn't. Two decimal places of a cent match the precision of four decimal
+// places of a euro, so nothing is lost in the conversion.
+function formatCentsPerGram(valuePerGram: number): string {
+  return `${(valuePerGram * 100).toFixed(2)} cents/g protein`;
+}
+
 // With a rank, the rank is the sort key being shown (e.g. /cheapest) so it
 // leads the line. Without one, recency is implicit and the date leads instead
 // (e.g. /history).
 function formatEntryLine(entry: db.Entry, rank?: number): string {
   const date = new Date(entry.created_at).toISOString().slice(0, 10);
   const label = entry.name ?? "(no name)";
-  const value = `€${entry.value_per_gram.toFixed(4)}/g protein`;
+  const value = formatCentsPerGram(entry.value_per_gram);
   return rank !== undefined ? `${rank}. ${label} — ${value} (${date})` : `${date}: ${label} — ${value}`;
 }
 
@@ -211,7 +219,7 @@ export default {
     });
     await db.clearPending(env.DB, chatId);
     const label = name ? `${name} — ` : "";
-    await reply(`${label}€${value.toFixed(4)}/g protein\nSaved ✓`);
+    await reply(`${label}${formatCentsPerGram(value)}\nSaved ✓`);
     return new Response("OK");
   },
 };
