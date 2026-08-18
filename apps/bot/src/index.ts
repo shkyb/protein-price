@@ -90,8 +90,8 @@ async function completeEntry(env: Env, chatId: number, pending: db.Pending, name
     value_per_gram: value,
   });
   await db.clearPending(env.DB, chatId);
-  const label = name ? `${name} — ` : "";
-  return `${label}${formatCentsPerGram(value)}\nSaved ✓`;
+  const nameLine = name ?? "(no name)";
+  return `${nameLine}\n${formatCentsPerGram(value)}\nSaved ✓`;
 }
 
 async function handleCallbackQuery(
@@ -166,6 +166,10 @@ export default {
     const text = MENU_LABEL_TO_COMMAND[rawText] ?? rawText;
     const reply = (msg: string, keyboard?: InlineKeyboard) =>
       sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg, keyboard);
+    // Step prompts are entirely bot-authored text, so bolding the counter is
+    // safe — unlike the result message, nothing here is raw user input.
+    const replyStep = (step: number, question: string, keyboard: InlineKeyboard) =>
+      sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, `*Step ${step} of ${TOTAL_STEPS}*\n\n${question}`, keyboard, "Markdown");
 
     await db.purgeStalePending(env.DB, PENDING_TTL_MS);
 
@@ -247,7 +251,7 @@ export default {
         protein: null,
         updated_at: Date.now(),
       });
-      await reply(`Step 1 of ${TOTAL_STEPS}: what's the price? (€)`, CANCEL_KEYBOARD);
+      await replyStep(1, "What's the price? (€)", CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -268,7 +272,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, price: result.value, step: "weight", updated_at: Date.now() });
-      await reply(`Step 2 of ${TOTAL_STEPS}: package weight? (grams)`, CANCEL_KEYBOARD);
+      await replyStep(2, "Package weight? (grams)", CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -283,7 +287,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, weight: result.value, step: "protein", updated_at: Date.now() });
-      await reply(`Step 3 of ${TOTAL_STEPS}: protein per 100g?`, CANCEL_KEYBOARD);
+      await replyStep(3, "Protein per 100g?", CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -298,7 +302,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, protein: result.value, step: "name", updated_at: Date.now() });
-      await reply(`Step 4 of ${TOTAL_STEPS}: product name? (optional — send /skip)`, NAME_STEP_KEYBOARD);
+      await replyStep(4, "Product name? (optional — send /skip)", NAME_STEP_KEYBOARD);
       return new Response("OK");
     }
 

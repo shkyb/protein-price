@@ -23,19 +23,26 @@ export interface InlineKeyboardButton {
 export type InlineKeyboard = InlineKeyboardButton[][];
 
 /**
- * Sends a plain-text reply, optionally with inline buttons attached. Failures
- * are logged, not thrown — a failed reply shouldn't turn into a 500 back to
- * Telegram (which would just cause retries).
+ * Sends a reply, optionally with inline buttons and/or Markdown formatting.
+ * Only pass parseMode on text you fully control — any user-supplied text in
+ * a Markdown-parsed message risks broken rendering or a rejected call if it
+ * contains _, *, `, or [ characters. Failures are logged, not thrown — a
+ * failed reply shouldn't turn into a 500 back to Telegram (which would just
+ * cause retries).
  */
 export async function sendMessage(
   token: string,
   chatId: number,
   text: string,
-  inlineKeyboard?: InlineKeyboard
+  inlineKeyboard?: InlineKeyboard,
+  parseMode?: "Markdown"
 ): Promise<void> {
   const body: Record<string, unknown> = { chat_id: chatId, text };
   if (inlineKeyboard) {
     body.reply_markup = { inline_keyboard: inlineKeyboard };
+  }
+  if (parseMode) {
+    body.parse_mode = parseMode;
   }
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
