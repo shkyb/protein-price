@@ -9,3 +9,6 @@ node_modules/
 dist/
 *.local
 .DS_Store
+
+# Local Claude Code session/config files — never meant for the repo.
+.claude/
