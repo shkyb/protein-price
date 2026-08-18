@@ -173,14 +173,16 @@ export default {
       await sendMessageWithMenu(
         env.TELEGRAM_BOT_TOKEN,
         chatId,
-        "Hi! I calculate how many euros you're paying per gram of protein.\n\n" +
+        "Hi! I calculate how many euros you're paying per gram of protein, so you can tell " +
+          "which of your groceries is actually the cheaper protein source.\n\n" +
+          "Example: €2.50 for 500g with 23g protein per 100g → 2.17 cents per gram of protein.\n\n" +
           "/add — log a new item\n" +
           "/history — see your last entries\n" +
           "/cheapest — see your cheapest protein sources\n" +
           "/undo — remove your last saved entry\n" +
           "/cancel — cancel the current entry\n" +
           "/deleteme — delete all your saved data\n\n" +
-          "I only store the numbers you send me and your Telegram chat ID — nothing else."
+          "No sensitive data is recorded."
       );
       return new Response("OK");
     }
