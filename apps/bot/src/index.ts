@@ -177,6 +177,7 @@ export default {
           "/add — log a new item\n" +
           "/history — see your last entries\n" +
           "/cheapest — see your cheapest protein sources\n" +
+          "/undo — remove your last saved entry\n" +
           "/cancel — cancel the current entry\n" +
           "/deleteme — delete all your saved data\n\n" +
           "I only store the numbers you send me and your Telegram chat ID — nothing else."
@@ -204,6 +205,17 @@ export default {
       const lines = entries.map((e, i) => formatEntryLine(e, i + 1)).join("\n");
       const heading = entries.length === 1 ? "Your cheapest entry" : `Your ${entries.length} cheapest entries`;
       await reply(`${heading}, best value first:\n\n${lines}`);
+      return new Response("OK");
+    }
+
+    if (text === "/undo") {
+      const removed = await db.deleteLastEntry(env.DB, chatId);
+      if (!removed) {
+        await reply("Nothing to undo, you haven't logged anything yet.");
+        return new Response("OK");
+      }
+      const label = removed.name ?? "(no name)";
+      await reply(`Removed: ${label} — ${formatCentsPerGram(removed.value_per_gram)}`);
       return new Response("OK");
     }
 

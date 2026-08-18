@@ -84,6 +84,18 @@ export async function saveEntry(
     .run();
 }
 
+/** Backs /undo — removes and returns the single most recent entry, or null
+ * if there was nothing to remove. */
+export async function deleteLastEntry(db: D1Database, chatId: number): Promise<Entry | null> {
+  const row = await db
+    .prepare("SELECT * FROM entries WHERE chat_id = ? ORDER BY created_at DESC, id DESC LIMIT 1")
+    .bind(chatId)
+    .first<Entry>();
+  if (!row) return null;
+  await db.prepare("DELETE FROM entries WHERE id = ?").bind(row.id).run();
+  return row;
+}
+
 /** Backs the public /deleteme command — full self-serve erasure, no request needed. */
 export async function deleteAllForChat(db: D1Database, chatId: number): Promise<void> {
   await db.prepare("DELETE FROM entries WHERE chat_id = ?").bind(chatId).run();
