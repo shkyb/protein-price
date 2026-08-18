@@ -13,7 +13,7 @@ const MAX_WEIGHT_GRAMS = 50_000; // 50kg
 const MAX_PROTEIN_PER_100G = 100;
 const MAX_NAME_LENGTH = 100;
 const MAX_ENTRIES_PER_DAY = 100; // per chat_id — plenty for real use, blocks scripted floods
-const MAX_HISTORY_SHOWN = 10;
+const MAX_LIST_SHOWN = 10; // shared by /history and /cheapest
 
 // Digits with an optional single decimal separator (. or ,) — nothing else.
 // Rejects letters, symbols, signs, and scientific notation ("1e2" would
@@ -34,10 +34,14 @@ function validateNumber(text: string, max: number): NumberValidation {
   return { ok: true, value };
 }
 
-function formatEntryLine(entry: db.Entry): string {
+// With a rank, the rank is the sort key being shown (e.g. /cheapest) so it
+// leads the line. Without one, recency is implicit and the date leads instead
+// (e.g. /history).
+function formatEntryLine(entry: db.Entry, rank?: number): string {
   const date = new Date(entry.created_at).toISOString().slice(0, 10);
   const label = entry.name ?? "(no name)";
-  return `${date}: ${label} — €${entry.value_per_gram.toFixed(4)}/g protein`;
+  const value = `€${entry.value_per_gram.toFixed(4)}/g protein`;
+  return rank !== undefined ? `${rank}. ${label} — ${value} (${date})` : `${date}: ${label} — ${value}`;
 }
 
 export default {
@@ -77,6 +81,7 @@ export default {
         "Hi! I calculate how many euros you're paying per gram of protein.\n\n" +
           "/add — log a new item\n" +
           "/history — see your last entries\n" +
+          "/cheapest — see your cheapest protein sources\n" +
           "/cancel — cancel the current entry\n" +
           "/deleteme — delete all your saved data\n\n" +
           "I only store the numbers you send me and your Telegram chat ID — nothing else."
@@ -85,13 +90,25 @@ export default {
     }
 
     if (text === "/history") {
-      const entries = await db.getRecentEntries(env.DB, chatId, MAX_HISTORY_SHOWN);
+      const entries = await db.getRecentEntries(env.DB, chatId, MAX_LIST_SHOWN);
       if (entries.length === 0) {
         await reply("You haven't logged anything yet. Send /add to log your first item.");
         return new Response("OK");
       }
-      const lines = entries.map(formatEntryLine).join("\n");
+      const lines = entries.map((e) => formatEntryLine(e)).join("\n");
       await reply(`Your last ${entries.length} ${entries.length === 1 ? "entry" : "entries"}:\n\n${lines}`);
+      return new Response("OK");
+    }
+
+    if (text === "/cheapest") {
+      const entries = await db.getCheapestEntries(env.DB, chatId, MAX_LIST_SHOWN);
+      if (entries.length === 0) {
+        await reply("You haven't logged anything yet. Send /add to log your first item.");
+        return new Response("OK");
+      }
+      const lines = entries.map((e, i) => formatEntryLine(e, i + 1)).join("\n");
+      const heading = entries.length === 1 ? "Your cheapest entry" : `Your ${entries.length} cheapest entries`;
+      await reply(`${heading}, best value first:\n\n${lines}`);
       return new Response("OK");
     }
 

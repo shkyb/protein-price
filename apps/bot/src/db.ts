@@ -127,3 +127,16 @@ export async function getRecentEntries(
     .all<Entry>();
   return results;
 }
+
+/** Backs /cheapest — cheapest euros-per-gram-of-protein first. */
+export async function getCheapestEntries(
+  db: D1Database,
+  chatId: number,
+  limit: number
+): Promise<Entry[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM entries WHERE chat_id = ? ORDER BY value_per_gram ASC LIMIT ?")
+    .bind(chatId, limit)
+    .all<Entry>();
+  return results;
+}
