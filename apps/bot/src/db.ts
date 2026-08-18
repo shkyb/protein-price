@@ -103,3 +103,27 @@ export async function countRecentEntries(
     .first<{ count: number }>();
   return row?.count ?? 0;
 }
+
+export interface Entry {
+  id: number;
+  chat_id: number;
+  name: string | null;
+  price: number;
+  weight: number;
+  protein: number;
+  value_per_gram: number;
+  created_at: number;
+}
+
+/** Backs /history — most recent entries first. */
+export async function getRecentEntries(
+  db: D1Database,
+  chatId: number,
+  limit: number
+): Promise<Entry[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM entries WHERE chat_id = ? ORDER BY created_at DESC LIMIT ?")
+    .bind(chatId, limit)
+    .all<Entry>();
+  return results;
+}
