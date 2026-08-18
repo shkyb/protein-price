@@ -1,7 +1,21 @@
-import { sendMessage, type TelegramUpdate } from "./telegram";
+import {
+  sendMessage,
+  editMessageText,
+  answerCallbackQuery,
+  type TelegramUpdate,
+  type InlineKeyboard,
+} from "./telegram";
 import { computeValuePerGramProtein } from "./calc";
 import * as db from "./db";
 import type { Env } from "./db";
+
+const CANCEL_KEYBOARD: InlineKeyboard = [[{ text: "❌ Cancel", callback_data: "cancel" }]];
+const NAME_STEP_KEYBOARD: InlineKeyboard = [
+  [
+    { text: "⏭ Skip", callback_data: "skip" },
+    { text: "❌ Cancel", callback_data: "cancel" },
+  ],
+];
 
 const PENDING_TTL_MS = 60 * 60 * 1000; // 1 hour — abandoned flows get cleared, not saved data.
 
@@ -52,6 +66,60 @@ function formatEntryLine(entry: db.Entry, rank?: number): string {
   return rank !== undefined ? `${rank}. ${label} — ${value} (${date})` : `${date}: ${label} — ${value}`;
 }
 
+// Shared by the text-based name step and the "Skip" button, so saving an
+// entry works identically no matter which path finished it.
+async function completeEntry(env: Env, chatId: number, pending: db.Pending, name: string | null): Promise<string> {
+  const { price, weight, protein } = pending;
+  const value = computeValuePerGramProtein(price!, weight!, protein!);
+  await db.saveEntry(env.DB, {
+    chat_id: chatId,
+    name,
+    price: price!,
+    weight: weight!,
+    protein: protein!,
+    value_per_gram: value,
+  });
+  await db.clearPending(env.DB, chatId);
+  const label = name ? `${name} — ` : "";
+  return `${label}${formatCentsPerGram(value)}\nSaved ✓`;
+}
+
+async function handleCallbackQuery(
+  env: Env,
+  cq: NonNullable<TelegramUpdate["callback_query"]>
+): Promise<Response> {
+  // Must happen regardless of outcome, or the tapped button spins forever on
+  // the user's end.
+  await answerCallbackQuery(env.TELEGRAM_BOT_TOKEN, cq.id);
+
+  const chatId = cq.message?.chat.id;
+  const messageId = cq.message?.message_id;
+  if (chatId === undefined || messageId === undefined) {
+    return new Response("OK");
+  }
+  const edit = (text: string) => editMessageText(env.TELEGRAM_BOT_TOKEN, chatId, messageId, text);
+
+  if (cq.data === "cancel") {
+    await db.clearPending(env.DB, chatId);
+    await edit("Cancelled.");
+    return new Response("OK");
+  }
+
+  if (cq.data === "skip") {
+    const pending = await db.getPending(env.DB, chatId);
+    if (!pending || pending.step !== "name") {
+      // Flow moved on or expired (1hr TTL) since this button was shown.
+      await edit("This entry has expired. Send /add to start again.");
+      return new Response("OK");
+    }
+    const resultText = await completeEntry(env, chatId, pending, null);
+    await edit(resultText);
+    return new Response("OK");
+  }
+
+  return new Response("OK");
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -73,6 +141,11 @@ export default {
     }
 
     const update = await request.json<TelegramUpdate>();
+
+    if (update.callback_query) {
+      return handleCallbackQuery(env, update.callback_query);
+    }
+
     const message = update.message;
     if (!message?.text || !message.chat?.id) {
       return new Response("OK");
@@ -80,7 +153,8 @@ export default {
 
     const chatId = message.chat.id;
     const text = message.text.trim();
-    const reply = (msg: string) => sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg);
+    const reply = (msg: string, keyboard?: InlineKeyboard) =>
+      sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg, keyboard);
 
     await db.purgeStalePending(env.DB, PENDING_TTL_MS);
 
@@ -146,7 +220,7 @@ export default {
         protein: null,
         updated_at: Date.now(),
       });
-      await reply("What's the price? (€)");
+      await reply("What's the price? (€)", CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -167,7 +241,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, price: result.value, step: "weight", updated_at: Date.now() });
-      await reply("Package weight? (grams)");
+      await reply("Package weight? (grams)", CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -182,7 +256,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, weight: result.value, step: "protein", updated_at: Date.now() });
-      await reply("Protein per 100g?");
+      await reply("Protein per 100g?", CANCEL_KEYBOARD);
       return new Response("OK");
     }
 
@@ -197,7 +271,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, protein: result.value, step: "name", updated_at: Date.now() });
-      await reply("Product name? (optional — send /skip)");
+      await reply("Product name? (optional — send /skip)", NAME_STEP_KEYBOARD);
       return new Response("OK");
     }
 
@@ -207,19 +281,8 @@ export default {
       return new Response("OK");
     }
     const name = text === "/skip" ? null : text;
-    const { price, weight, protein } = pending;
-    const value = computeValuePerGramProtein(price!, weight!, protein!);
-    await db.saveEntry(env.DB, {
-      chat_id: chatId,
-      name,
-      price: price!,
-      weight: weight!,
-      protein: protein!,
-      value_per_gram: value,
-    });
-    await db.clearPending(env.DB, chatId);
-    const label = name ? `${name} — ` : "";
-    await reply(`${label}${formatCentsPerGram(value)}\nSaved ✓`);
+    const resultText = await completeEntry(env, chatId, pending, name);
+    await reply(resultText);
     return new Response("OK");
   },
 };
