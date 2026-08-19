@@ -73,7 +73,7 @@ function formatCentsPerGram(valuePerGram: number): string {
 // handled: a literal backtick in a name could prematurely close the block,
 // so it's stripped before the name ever reaches the table.
 const DATE_COL = 10; // "YYYY-MM-DD"
-const NAME_COL = 18;
+const NAME_COL = 12; // kept narrow — mobile Telegram wraps a code block well under 40 chars
 
 function centsValue(valuePerGram: number): string {
   return (valuePerGram * 100).toFixed(2);
@@ -97,12 +97,14 @@ function buildHistoryTable(entries: db.Entry[]): string {
   return "```\n" + [header, ...rows].join("\n") + "\n```";
 }
 
+// No date column here — /history already covers "when", and cramming
+// rank + name + value + date into one row is what was pushing this table
+// past mobile Telegram's wrap width in the first place.
 function buildCheapestTable(entries: db.Entry[]): string {
   const rankCol = 3;
-  const header = `${"#".padEnd(rankCol)}${"Name".padEnd(NAME_COL)} cents/g  Date`;
+  const header = `${"#".padEnd(rankCol)}${"Name".padEnd(NAME_COL)} cents/g`;
   const rows = entries.map((e, i) => {
-    const date = new Date(e.created_at).toISOString().slice(0, 10);
-    return `${String(i + 1).padEnd(rankCol)}${tableNameCell(e.name)} ${centsValue(e.value_per_gram).padStart(7)}  ${date}`;
+    return `${String(i + 1).padEnd(rankCol)}${tableNameCell(e.name)} ${centsValue(e.value_per_gram).padStart(7)}`;
   });
   return "```\n" + [header, ...rows].join("\n") + "\n```";
 }
