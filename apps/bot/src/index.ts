@@ -10,12 +10,21 @@ import { computeValuePerGramProtein } from "./calc";
 import * as db from "./db";
 import type { Env } from "./db";
 
+// Price has no earlier step to return to, so it only ever gets Cancel.
 const CANCEL_KEYBOARD: InlineKeyboard = [[{ text: "❌ Cancel", callback_data: "cancel" }]];
-const NAME_STEP_KEYBOARD: InlineKeyboard = [
+const BACK_CANCEL_KEYBOARD: InlineKeyboard = [
   [
-    { text: "⏭ Skip", callback_data: "skip" },
+    { text: "⬅ Back", callback_data: "back" },
     { text: "❌ Cancel", callback_data: "cancel" },
   ],
+];
+// Three buttons on one row gets cramped on a phone, so Cancel gets its own row.
+const BACK_SKIP_CANCEL_KEYBOARD: InlineKeyboard = [
+  [
+    { text: "⬅ Back", callback_data: "back" },
+    { text: "⏭ Skip", callback_data: "skip" },
+  ],
+  [{ text: "❌ Cancel", callback_data: "cancel" }],
 ];
 
 // Pressing a persistent-menu button sends its label as plain text, so it's
@@ -45,6 +54,47 @@ const TOTAL_STEPS = 4; // price, weight, protein, name
 const NUMBER_PATTERN = /^\d+([.,]\d+)?$/;
 
 type NumberValidation = { ok: true; value: number } | { ok: false; reason: "format" | "range" };
+
+// One place holding what each step asks and shows, used both going forward
+// (the normal flow) and going back (the "⬅ Back" button), so the two paths
+// can never drift out of sync with each other.
+const STEP_ORDER: db.Step[] = ["price", "weight", "protein", "name"];
+
+const STEP_INFO: Record<db.Step, { number: number; question: string; keyboard: InlineKeyboard }> = {
+  price: { number: 1, question: "What's the price? (€)", keyboard: CANCEL_KEYBOARD },
+  weight: { number: 2, question: "Package weight? (grams)", keyboard: BACK_CANCEL_KEYBOARD },
+  protein: { number: 3, question: "Protein per 100g?", keyboard: BACK_CANCEL_KEYBOARD },
+  name: { number: 4, question: "Product name? (optional — send /skip)", keyboard: BACK_SKIP_CANCEL_KEYBOARD },
+};
+
+function previousStep(step: db.Step): db.Step | null {
+  const idx = STEP_ORDER.indexOf(step);
+  return idx > 0 ? STEP_ORDER[idx - 1] : null;
+}
+
+// Only price/weight/protein have a value worth "remembering" across a Back —
+// name is never written to `pending`, it's only read at the final step.
+function currentValueForStep(pending: db.Pending, step: db.Step): number | null {
+  if (step === "price") return pending.price;
+  if (step === "weight") return pending.weight;
+  if (step === "protein") return pending.protein;
+  return null;
+}
+
+function formatHintValue(step: db.Step, value: number): string {
+  if (step === "price") return `€${value}`;
+  return `${value}g`;
+}
+
+// The hint (e.g. "_Currently: 500g_") only appears when revisiting a step
+// that already has an answer — a fresh step has nothing to remember yet.
+// Safe to italicize since both the question and the hint are entirely
+// bot-computed, never raw user text.
+function stepPromptText(step: db.Step, hintValue: number | null): string {
+  const info = STEP_INFO[step];
+  const hint = hintValue !== null ? `\n\n_Currently: ${formatHintValue(step, hintValue)}_` : "";
+  return `*Step ${info.number} of ${TOTAL_STEPS}*\n\n${info.question}${hint}`;
+}
 
 function validateNumber(text: string, max: number): NumberValidation {
   const trimmed = text.trim();
@@ -140,7 +190,8 @@ async function handleCallbackQuery(
   if (chatId === undefined || messageId === undefined) {
     return new Response("OK");
   }
-  const edit = (text: string) => editMessageText(env.TELEGRAM_BOT_TOKEN, chatId, messageId, text);
+  const edit = (text: string, keyboard?: InlineKeyboard, parseMode?: "Markdown") =>
+    editMessageText(env.TELEGRAM_BOT_TOKEN, chatId, messageId, text, keyboard, parseMode);
 
   if (cq.data === "cancel") {
     await db.clearPending(env.DB, chatId);
@@ -157,6 +208,23 @@ async function handleCallbackQuery(
     }
     const resultText = await completeEntry(env, chatId, pending, null);
     await edit(resultText);
+    return new Response("OK");
+  }
+
+  if (cq.data === "back") {
+    const pending = await db.getPending(env.DB, chatId);
+    if (!pending) {
+      // Flow moved on or expired (1hr TTL) since this button was shown.
+      await edit("This entry has expired. Send /add to start again.");
+      return new Response("OK");
+    }
+    // No previous step from price — just re-show it rather than dead-end.
+    const targetStep = previousStep(pending.step) ?? pending.step;
+    if (targetStep !== pending.step) {
+      await db.setPending(env.DB, { ...pending, step: targetStep, updated_at: Date.now() });
+    }
+    const hint = currentValueForStep(pending, targetStep);
+    await edit(stepPromptText(targetStep, hint), STEP_INFO[targetStep].keyboard, "Markdown");
     return new Response("OK");
   }
 
@@ -199,10 +267,11 @@ export default {
     const text = MENU_LABEL_TO_COMMAND[rawText] ?? rawText;
     const reply = (msg: string, keyboard?: InlineKeyboard, parseMode?: "Markdown") =>
       sendMessage(env.TELEGRAM_BOT_TOKEN, chatId, msg, keyboard, parseMode);
-    // Step prompts are entirely bot-authored text, so bolding the counter is
-    // safe — unlike the result message, nothing here is raw user input.
-    const replyStep = (step: number, question: string, keyboard: InlineKeyboard) =>
-      reply(`*Step ${step} of ${TOTAL_STEPS}*\n\n${question}`, keyboard, "Markdown");
+    // Step prompts are entirely bot-authored text (question + hint), so
+    // bolding/italicizing is safe — unlike the result message, nothing here
+    // is raw user input.
+    const replyStep = (step: db.Step, hintValue: number | null = null) =>
+      reply(stepPromptText(step, hintValue), STEP_INFO[step].keyboard, "Markdown");
 
     await db.purgeStalePending(env.DB, PENDING_TTL_MS);
 
@@ -283,7 +352,7 @@ export default {
         protein: null,
         updated_at: Date.now(),
       });
-      await replyStep(1, "What's the price? (€)", CANCEL_KEYBOARD);
+      await replyStep("price");
       return new Response("OK");
     }
 
@@ -303,8 +372,9 @@ export default {
         );
         return new Response("OK");
       }
-      await db.setPending(env.DB, { ...pending, price: result.value, step: "weight", updated_at: Date.now() });
-      await replyStep(2, "Package weight? (grams)", CANCEL_KEYBOARD);
+      const updated = { ...pending, price: result.value, step: "weight" as const, updated_at: Date.now() };
+      await db.setPending(env.DB, updated);
+      await replyStep("weight", currentValueForStep(updated, "weight"));
       return new Response("OK");
     }
 
@@ -318,8 +388,9 @@ export default {
         );
         return new Response("OK");
       }
-      await db.setPending(env.DB, { ...pending, weight: result.value, step: "protein", updated_at: Date.now() });
-      await replyStep(3, "Protein per 100g?", CANCEL_KEYBOARD);
+      const updated = { ...pending, weight: result.value, step: "protein" as const, updated_at: Date.now() };
+      await db.setPending(env.DB, updated);
+      await replyStep("protein", currentValueForStep(updated, "protein"));
       return new Response("OK");
     }
 
@@ -334,7 +405,7 @@ export default {
         return new Response("OK");
       }
       await db.setPending(env.DB, { ...pending, protein: result.value, step: "name", updated_at: Date.now() });
-      await replyStep(4, "Product name? (optional — send /skip)", NAME_STEP_KEYBOARD);
+      await replyStep("name");
       return new Response("OK");
     }
 

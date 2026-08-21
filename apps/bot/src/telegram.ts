@@ -88,14 +88,18 @@ export async function editMessageText(
   chatId: number,
   messageId: number,
   text: string,
-  inlineKeyboard?: InlineKeyboard
+  inlineKeyboard?: InlineKeyboard,
+  parseMode?: "Markdown"
 ): Promise<void> {
-  const body = {
+  const body: Record<string, unknown> = {
     chat_id: chatId,
     message_id: messageId,
     text,
     reply_markup: { inline_keyboard: inlineKeyboard ?? [] },
   };
+  if (parseMode) {
+    body.parse_mode = parseMode;
+  }
   const res = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
     method: "POST",
     headers: { "content-type": "application/json" },
